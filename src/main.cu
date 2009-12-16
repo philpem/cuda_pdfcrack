@@ -8,6 +8,11 @@
 // total number of thread entries
 #define SIZE (THREADSPERBLOCK * BLOCKSPERGRID)
 
+// check parameters
+#if (THREADSPERBLOCK > 512)
+# error Number of threads per block exceeds maximum permitted by CUDA
+#endif
+
 //  Kernel definition, see also section 2.3 of Nvidia Cuda Programming Guide
 __global__ void vecAdd(float* A, float* B, float* C)
 {
