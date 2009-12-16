@@ -1,7 +1,7 @@
-#include  <stdio.h>
+#include <stdio.h>
 
 //  Kernel definition, see also section 2.3 of Nvidia Cuda Programming Guide
-__global__  void vecAdd(float* A, float* B, float* C)
+__global__ void vecAdd(float* A, float* B, float* C)
 {
 	// calculate array offset for this thread's global data
 	int i = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -10,7 +10,8 @@ __global__  void vecAdd(float* A, float* B, float* C)
 	C[i] = A[i] + B[i];
 }
 
-#define  SIZE 10
+// size of thread buffer
+#define SIZE 10
 
 int main()
 {
@@ -19,7 +20,7 @@ int main()
 	float *devPtrA;
 	float *devPtrB;
 	float *devPtrC;
-	int memsize= SIZE * sizeof(float);
+	int memsize = SIZE * sizeof(float);
 
 	// allocate GPU memory for the calculations
 	cudaMalloc((void**)&devPtrA, memsize);
@@ -32,14 +33,14 @@ int main()
 	}
 
 	// copy input data to the graphics chip
-	cudaMemcpy(devPtrA, A, memsize,  cudaMemcpyHostToDevice);
-	cudaMemcpy(devPtrB, B, memsize,  cudaMemcpyHostToDevice);
+	cudaMemcpy(devPtrA, A, memsize, cudaMemcpyHostToDevice);
+	cudaMemcpy(devPtrB, B, memsize, cudaMemcpyHostToDevice);
 
 	// __global__ functions are called:  Func<<< Dg, Db, Ns  >>>(parameter);
-	vecAdd<<<1, N>>>(devPtrA,  devPtrB, devPtrC);
+	vecAdd<<<1, N>>>(devPtrA, devPtrB, devPtrC);
 
 	// copy result from GPU to local CPU RAM
-	cudaMemcpy(C, devPtrC, memsize,  cudaMemcpyDeviceToHost);
+	cudaMemcpy(C, devPtrC, memsize, cudaMemcpyDeviceToHost);
 
 	// display result
 	for (int i=0; i<SIZE; i++)
