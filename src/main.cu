@@ -1,21 +1,28 @@
 #include <stdio.h>
 
+// number of threads per block
+#define THREADSPERBLOCK	5
+// number of blocks per grid
+#define BLOCKSPERGRID	2
+
+// total number of thread entries
+#define SIZE (THREADSPERBLOCK * BLOCKSPERGRID)
+
 //  Kernel definition, see also section 2.3 of Nvidia Cuda Programming Guide
 __global__ void vecAdd(float* A, float* B, float* C)
 {
 	// calculate array offset for this thread's global data
 	int i = (blockIdx.x * blockDim.x) + threadIdx.x;
 
+	// so we don't process unallocated data
+	if (i >= SIZE) return;
+
 	// calculate c
 	C[i] = A[i] + B[i];
 }
 
-// size of thread buffer
-#define SIZE 10
-
 int main()
 {
-	int N=SIZE;
 	float A[SIZE], B[SIZE], C[SIZE];
 	float *devPtrA;
 	float *devPtrB;
@@ -37,7 +44,7 @@ int main()
 	cudaMemcpy(devPtrB, B, memsize, cudaMemcpyHostToDevice);
 
 	// __global__ functions are called:  Func<<< Dg, Db, Ns  >>>(parameter);
-	vecAdd<<<1, N>>>(devPtrA, devPtrB, devPtrC);
+	vecAdd <<< BLOCKSPERGRID, THREADSPERBLOCK >>> (devPtrA, devPtrB, devPtrC);
 
 	// copy result from GPU to local CPU RAM
 	cudaMemcpy(C, devPtrC, memsize, cudaMemcpyDeviceToHost);
