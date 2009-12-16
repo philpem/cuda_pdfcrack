@@ -405,6 +405,11 @@ dep/%.d:	src/%.cc
 		sed 's,\($*\)\.o[ :]*,obj/\1.o $@ : ,g' < $@.$$$$ > $@; \
 		rm -f $@.$$$$
 
+dep/%.d:	src/%.cu
+	$(NVCC) -M $(NVCCFLAGS) $(CPPFLAGS) $< > $@.$$$$; \
+		sed 's,\($*\)\.o[ :]*,obj/\1.o $@ : ,g' < $@.$$$$ > $@; \
+		rm -f $@.$$$$
+
 ####
 # pull in the dependency files, but only for 'make $(TARGET)'
 ####
