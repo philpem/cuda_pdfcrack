@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 // number of threads per block
-#define THREADSPERBLOCK	5
+#define THREADSPERBLOCK	512
 // number of blocks per grid
 #define BLOCKSPERGRID	2
 
