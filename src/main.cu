@@ -3,10 +3,13 @@
 //  Kernel definition, see also section 2.3 of Nvidia Cuda Programming Guide
 __global__  void vecAdd(float* A, float* B, float* C)
 {
-	// threadIdx.x is a built-in variable  provided by CUDA at runtime
-	int i = threadIdx.x;
+	// calculate array offset for this thread's global data
+	int i = (blockIdx.x * blockDim.x) + threadIdx.x;
 
+	// init a, b
 	A[i] = B[i] = i;
+
+	// calculate c
 	C[i] = A[i] + B[i];
 }
 
