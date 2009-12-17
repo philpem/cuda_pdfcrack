@@ -213,26 +213,15 @@ __device__ void md5_process(md5_state_t *pms, const md5_byte_t *data /*[64]*/)
         c = pms->abcd[2], d = pms->abcd[3];
     md5_word_t t;
     /* Define storage for little-endian or both types of CPUs. */
-    md5_word_t xbuf[16];
-    const md5_word_t *X;
+    md5_word_t X[16];
 
-    {
-        {
-            /*
-             * On little-endian machines, we can process properly aligned
-             * data without copying it.
-             */
-            if (!((data - (const md5_byte_t *)0) & 3)) {
-                /* data are properly aligned */
-                X = (const md5_word_t *)data;
-            } else {
-                /* not aligned */
-				for (int i=0; i<64; i++)
-					(*(((unsigned char *)&xbuf)+i)) = (*(((unsigned char *)&data)+i));
-                X = xbuf;
-            }
-        }
-    }
+	for (int i=0; i<64; i+=4) {
+		X[i/4] = 
+			(data[i+0])       |
+			(data[i+1] << 8)  |
+			(data[i+2] << 16) |
+			(data[i+3] << 24);
+	}
 
 #define ROTATE_LEFT(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
 
