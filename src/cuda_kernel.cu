@@ -412,32 +412,168 @@ __device__ void md5_finish(md5_state_t *pms, md5_byte_t digest[16])
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// Load PDFINFO into constant memory
+
+__constant__ PDFINFO_s PDFINFO;
+
+void LoadPdfInfo(PDFINFO_s *info)
+{
+	cudaMemcpyToSymbol(PDFINFO, info, sizeof(*info));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// PDF password checker
+
+__constant__
+const unsigned char PADDING[] = { 0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41,
+								  0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08,
+								  0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80,
+								  0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a
+								};
+
+#define PDF_ALGORITHM_REV 3
+
 // the core of the crypto engine
 __global__ void ComputeKernel(ComputeBlock *blocks)
 {
 	// calculate array offset for this thread's global data
 	int i = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-	// so we don't process unallocated data
-	if ((blocks[i].inlen <= 0) || (blocks[i].keylen <= 0)) return;
+	// don't process passwords longer than 32 bytes (this is invalid anyway)
+	if (blocks[i].pwlen > 32) return;
 
+	// get this thread's compute block
+	ComputeBlock *block = &blocks[i];
+
+// Algorithm 3.6 -- Validating User Password.
+// 1. Perform all but the last step of Algorithm 3.5.
+//
+// Algorithm 3.5 -- Computing the Encryption Dictionary's U (User Password)
+// value (R3 or greater)
+// 1. Create an encryption key based on the User Password String, as
+//    described in Algorithm 3.2
+	// 1. Pad or truncate the password to exactly 32 bytes.
+	if (block->pwlen < 32) {
+		// password shorter than 32 bytes, pad up
+		for (int i=block->pwlen, j=0; i<32; i++, j++)
+			block->password[i] = PADDING[j];
+	}
+
+	// NOTE: if password is longer than 32 bytes, it will be rejected by the
+	// checks above, thus long pwds don't need truncating.
+
+	// 2. Initialise the MD5 hash function and pass the result of step 1 as
+	//    input to this function.
+	md5_state_t md5;
+	md5_init(&md5);
+	md5_append(&md5, (md5_byte_t *)block->password, 32);
+
+	// 3. Pass the value of the encryption dictionary's O entry to the MD5
+	//    hash function.
+	md5_append(&md5, PDFINFO.O, 32);
 /*
-	// do an RC4 key init
-	rc4_key rc4key;
-	rc4_prepare_key(blocks[i].key, blocks[i].keylen, &rc4key);
-
-	// do the encryption
-	rc4(blocks[i].input, blocks[i].inlen, &rc4key);
+char Dx[16];
+md5_finish(&md5, (md5_byte_t *)&Dx);
+for (int z=0; z<16; z++) block->debug[z] = Dx[z];
+for (int z=0; z<32; z++) block->debug[z+16] = PDFINFO.O[z];
+return;
 */
+	// 4. Treat the value of the P entry as an unsigned 4-byte integer and
+	//    pass these bytes to the MD5 hash function, low-order byte first.
+	unsigned char P[4];
+	P[0] = (PDFINFO.P)       & 0xff;
+	P[1] = (PDFINFO.P >> 8)  & 0xff;
+	P[2] = (PDFINFO.P >> 16) & 0xff;
+	P[3] = (PDFINFO.P >> 24) & 0xff;
+	md5_append(&md5, P, 4);
 
-	// md5 the input data
-	md5_state_s md5state;
-	md5_init(&md5state);
-	md5_append(&md5state, blocks[i].input, blocks[i].inlen);
-	md5_finish(&md5state, blocks[i].input);
+	// 5. Pass the first element of the file's file identifier array (the
+	//    value of the ID entry in the document's trailer dictionary) to
+	//    the MD5 hash function.
+	md5_append(&md5, PDFINFO.FileID, 16);
 
-	// endian check -- 01:00 means LE, 00:01 means BE
-//	int x = 1;
-//	blocks[i].input[0] = (*((const unsigned char *)&x));
-//	blocks[i].input[1] = (*(((const unsigned char *)&x)+1));
+	// 6. Revision 4 or greater: If document metadata is NOT being encrypted,
+	//    pass 4 bytes with the value 0xFF FF FF FF to the MD5 hash function.
+#if (PDF_ALGORITHM_REV >= 4)
+	const unsigned char FFbuf[] = {0xff, 0xff, 0xff, 0xff};
+	md5_append(&md5, FFbuf, 4);
+#endif
+
+	// 7. Finish the hash.
+	unsigned char digest[16];
+	md5_finish(&md5, digest);
+
+	// 8. Revision 3 or greater: Do the following 50 times:
+#if (PDF_ALGORITHM_REV >= 3)
+	const int N = PDFINFO.Length/8;
+	for (int i=0; i<50; i++) {
+		// Take the output from the previous MD5 hash, and pass the first N
+		// bytes of the output as input into a new MD5 hash. N is the number
+		// of bytes of the encryption key, as defined by the value of the
+		// encryption dictionary's Length entry.
+		md5_init(&md5);
+		md5_append(&md5, digest, N);
+		md5_finish(&md5, digest);
+	}
+#endif
+
+	// 9. Set the encryption key to the first N bytes of the output from the
+	//    final MD5 hash, where N is always 5 for revision 2 but, for revision
+	//    3 or greater, depends on the value of the encryption dictionary's
+	//    Length entry.
+	//
+	//    We also save the encryption key (it's used later)
+	unsigned char keybuf[16];
+	memcpy(keybuf, digest, 16);
+
+/////// End algorithm 3.2. Resume @ step 2 of Algorithm 3.5
+// Algorithm 3.5
+// 2. Initialise the MD5 hash function and pass the 32-byte padding string
+//    shown in step 1 of Algorithm 3.2 to this function.
+
+//  TODO: part of this (maybe upto and including 3.) could probably be
+//  precomputed on a per-file basis. Copy it for each run of this part
+//  of the algorithm.
+	md5_init(&md5);
+	md5_append(&md5, (unsigned char *)PADDING, 32);
+
+// 3. Pass the first element of the file's file identifier array to the hash
+//    function, then finish the hash.
+	md5_append(&md5, PDFINFO.FileID, 16);
+	md5_finish(&md5, digest);
+
+// 4. Encrypt the 16-byte result of the hash, using an RC4 encryption function
+//    with the encryption key from Step 1. (Algorithm 3.2).
+//  RC4() encrypts in-place, so digest
+	rc4_key rc4key;
+	rc4_prepare_key(keybuf, 16, &rc4key);
+	rc4(digest, 16, &rc4key);
+
+// 5. Do the following 19 times: Take the output from the previous invocation
+//    of the RC4 function, and pass it as input to a new invocation of the
+//    function. Use an encryption key generated by taking each byte of the
+//    original encryption key and performing an XOR between that byte and the
+//    single-byte value of the iteration counter (from 1 to 19).
+	unsigned char new_key[16];
+	for (int i=1; i<20; i++) {
+		// Generate the new key
+		for (int x=0; x<16; x++) {
+			new_key[x] = keybuf[x] ^ i;
+		}
+
+		// Set up the RC4 engine
+		rc4_prepare_key(new_key, 16, &rc4key);
+		rc4(digest, 16, &rc4key);
+	}
+
+	// "Digest" now contains the first 16 bytes of U, which need to be compared
+	// against the "U" value.
+	block->match = 1;
+	for (int i=0; i<16; i++) {
+		if (digest[i] != PDFINFO.U[i]) {
+			block->match = 0;
+			break;
+		}
+	}
 }
+
