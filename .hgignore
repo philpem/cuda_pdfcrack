@@ -2,3 +2,7 @@ syntax: glob
 .buildnum
 *~
 *.sw?
+obj/*.o
+dep/*.d
+src/version.h
+test
