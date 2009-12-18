@@ -4,15 +4,16 @@
 #include "password_gen.h"
 
 // number of threads per block
-#define THREADSPERBLOCK	512
+#define THREADSPERBLOCK	256
 // number of blocks per grid
-#define BLOCKSPERGRID	100
+#define BLOCKSPERGRID	16
+//#define BLOCKSPERGRID	512
 
 // total number of threads
 #define SIZE (THREADSPERBLOCK * BLOCKSPERGRID)
 
 // check parameters
-#if (THREADSPERBLOCK > 512)
+#if (THREADSPERBLOCK > 256)
 # error Number of threads per block exceeds maximum permitted by CUDA
 #endif
 
@@ -188,7 +189,7 @@ int main(int argc, char **argv)
 
 	// generate passwords
 	int done=false;
-	int MINLEN=1, MAXLEN=2;
+	int MINLEN=1, MAXLEN=4;
 	int len=MINLEN;
 	int counter[32];
 	char str[33];
