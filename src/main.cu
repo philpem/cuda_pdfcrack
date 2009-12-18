@@ -4,9 +4,9 @@
 #include "password_gen.h"
 
 // number of threads per block
-#define THREADSPERBLOCK	10
+#define THREADSPERBLOCK	512
 // number of blocks per grid
-#define BLOCKSPERGRID	1
+#define BLOCKSPERGRID	100
 
 // total number of threads
 #define SIZE (THREADSPERBLOCK * BLOCKSPERGRID)
@@ -186,58 +186,80 @@ int main(int argc, char **argv)
 	// allocate GPU memory for the calculations
 	cudaMalloc((void**)&devPtrCb, memsize);
 
-	// initialise input array
-	for (int i=0; i<SIZE; i++) {
-		cb[i].pwlen = 0;
-		cb[i].match = 99;		// system error
-	}
-
 	// generate passwords
-	int len=1;
+	int done=false;
+	int MINLEN=1, MAXLEN=2;
+	int len=MINLEN;
 	int counter[32];
 	char str[33];
 	password_init(32, counter, str);
 	do {
-		for (int i=0; i<SIZE; i++) {
+		int i;
+
+		// create one block of passwords
+		for (i=0; i<SIZE; i++) {
+			// null terminate and copy into password block
 			str[len]='\0';
-			printf("%s\n", str);
+			strncpy(cb[i].password, str, sizeof(cb[i].password));
+
+			// set password length and match flag
+			cb[i].pwlen = len;
+			cb[i].match = 99;		// system error
+
+			// if overflow, init for another character in length
 			if (password_next(len, counter, str)) {
 				password_init(len+1, counter, str);
 				len++;
 			}
-			if (len > 2) break;
+
+			// break if we hit the maximum length
+			if (len > MAXLEN) break;
 		}
-	} while (len <= 2);
 
-return;
+		// fill unused password blocks
+		if (i<SIZE) {
+			printf("::::: %d unused\n", SIZE-i);
+			for (; i<SIZE; i++) {
+				cb[i].pwlen = 0;
+				cb[i].match = 99;		// system error
+			}
+		}
 
-/*
-	// create some input data
-	for (int i=0; i<SIZE; i++) {
-		const char *PASSWD="usea";
-		strcpy(cb[i].password, PASSWD);
-		cb[i].password[strlen(PASSWD)-1] += i;
-		cb[i].pwlen = strlen(PASSWD);
-		cb[i].match = 99;
-	}
-*/
-	// copy input data to the graphics chip
-	cudaMemcpy(devPtrCb, cb, memsize, cudaMemcpyHostToDevice);
+		// process the passwords
 
-	// Copy PDFINFO block from CPU --> GPU "constant RAM" space
-	LoadPdfInfo(&pdfinfo_loc);
+		// copy input data to the graphics chip
+		cudaMemcpy(devPtrCb, cb, memsize, cudaMemcpyHostToDevice);
 
-	// __global__ functions are called:  Func<<< Dg, Db, Ns  >>>(parameter);
-	ComputeKernel <<< BLOCKSPERGRID, THREADSPERBLOCK >>> (devPtrCb);
+		// Copy PDFINFO block from CPU --> GPU "constant RAM" space
+		LoadPdfInfo(&pdfinfo_loc);
 
-	// copy result from GPU to local CPU RAM
-	cudaMemcpy(cb, devPtrCb, memsize, cudaMemcpyDeviceToHost);
+		// __global__ functions are called:  Func<<< Dg, Db, Ns  >>>(parameter);
+		ComputeKernel <<< BLOCKSPERGRID, THREADSPERBLOCK >>> (devPtrCb);
 
-	for (int i=0; i<SIZE; i++) {
-		if (cb[i].pwlen == 0) break;
-		cb[i].password[cb[i].pwlen] = '\0';
-		printf("%3d\t%s\t%s\n", i, cb[i].password, ((cb[i].match == 99) ? "SysError" : (cb[i].match ? "MATCH" : "fail")));
-	}
+		// copy result from GPU to local CPU RAM
+		cudaMemcpy(cb, devPtrCb, memsize, cudaMemcpyDeviceToHost);
+
+		// scan through the output array
+		for (int i=0; i<SIZE; i++) {
+			// exit if we hit the start of the "empty" compute blocks
+			if (cb[i].pwlen == 0) break;
+
+			// don't display non-matching passwords
+			if (!cb[i].match) continue;
+
+			// null-terminate the password
+			cb[i].password[cb[i].pwlen] = '\0';
+
+			// display the password and status
+			printf("%3d\t%s\t%s\n", i, cb[i].password, ((cb[i].match == 99) ? "SysError" : (cb[i].match ? "MATCH" : "fail")));
+
+			// if this is a password match (not a syserror or a no-match), stop the scan
+			if (cb[i].match) {
+				done = true;
+				break;
+			}
+		}
+	} while ((len <= MAXLEN) && (!done));
 
 	// free GPU memory
 	cudaFree(devPtrCb);
