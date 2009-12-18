@@ -2,10 +2,9 @@
 #define H__CUDA_KERNEL_H
 
 typedef struct {
-	char password[32];
+	char password[33];
 	int pwlen;
 	int match;
-	char debug[64];
 } ComputeBlock;
 
 typedef struct {

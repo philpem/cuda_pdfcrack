@@ -471,13 +471,7 @@ __global__ void ComputeKernel(ComputeBlock *blocks)
 	// 3. Pass the value of the encryption dictionary's O entry to the MD5
 	//    hash function.
 	md5_append(&md5, PDFINFO.O, 32);
-/*
-char Dx[16];
-md5_finish(&md5, (md5_byte_t *)&Dx);
-for (int z=0; z<16; z++) block->debug[z] = Dx[z];
-for (int z=0; z<32; z++) block->debug[z+16] = PDFINFO.O[z];
-return;
-*/
+
 	// 4. Treat the value of the P entry as an unsigned 4-byte integer and
 	//    pass these bytes to the MD5 hash function, low-order byte first.
 	unsigned char P[4];

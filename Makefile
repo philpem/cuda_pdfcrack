@@ -112,7 +112,7 @@ BUILD_TYPE	?=	debug
 TARGET		=	test
 
 # source files that produce object files
-SRC			=	main.cu cuda_kernel.cu
+SRC			=	main.cu cuda_kernel.cu password_gen.cu
 
 # source type - either "c" or "cpp" (C or C++)
 SRC_TYPE	=	c

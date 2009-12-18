@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "cuda_kernel.h"
+#include "password_gen.h"
 
 // number of threads per block
-#define THREADSPERBLOCK	13
+#define THREADSPERBLOCK	10
 // number of blocks per grid
-#define BLOCKSPERGRID	2
+#define BLOCKSPERGRID	1
 
 // total number of threads
 #define SIZE (THREADSPERBLOCK * BLOCKSPERGRID)
@@ -185,6 +186,32 @@ int main(int argc, char **argv)
 	// allocate GPU memory for the calculations
 	cudaMalloc((void**)&devPtrCb, memsize);
 
+	// initialise input array
+	for (int i=0; i<SIZE; i++) {
+		cb[i].pwlen = 0;
+		cb[i].match = 99;		// system error
+	}
+
+	// generate passwords
+	int len=1;
+	int counter[32];
+	char str[33];
+	password_init(32, counter, str);
+	do {
+		for (int i=0; i<SIZE; i++) {
+			str[len]='\0';
+			printf("%s\n", str);
+			if (password_next(len, counter, str)) {
+				password_init(len+1, counter, str);
+				len++;
+			}
+			if (len > 2) break;
+		}
+	} while (len <= 2);
+
+return;
+
+/*
 	// create some input data
 	for (int i=0; i<SIZE; i++) {
 		const char *PASSWD="usea";
@@ -193,7 +220,7 @@ int main(int argc, char **argv)
 		cb[i].pwlen = strlen(PASSWD);
 		cb[i].match = 99;
 	}
-
+*/
 	// copy input data to the graphics chip
 	cudaMemcpy(devPtrCb, cb, memsize, cudaMemcpyHostToDevice);
 
@@ -206,14 +233,10 @@ int main(int argc, char **argv)
 	// copy result from GPU to local CPU RAM
 	cudaMemcpy(cb, devPtrCb, memsize, cudaMemcpyDeviceToHost);
 
-	// display result
-//	for (int i=0; i<SIZE; i++)
-//		printf("C[%d]=%f\n",i,C[i]);
-
 	for (int i=0; i<SIZE; i++) {
+		if (cb[i].pwlen == 0) break;
 		cb[i].password[cb[i].pwlen] = '\0';
 		printf("%3d\t%s\t%s\n", i, cb[i].password, ((cb[i].match == 99) ? "SysError" : (cb[i].match ? "MATCH" : "fail")));
-		hex_dump(&cb[i].debug, 48);//sizeof(cb[i].debug));
 	}
 
 	// free GPU memory
