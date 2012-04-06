@@ -251,7 +251,7 @@ int main(int argc, char **argv)
 			// exit if we hit the start of the "empty" compute blocks
 			if (cb[i].pwlen == 0) break;
 
-			// don't display non-matching passwords
+			// don't display non-matching passwords (except the first one in this block)
 			if ((!cb[i].match) && (i != 0)) continue;
 
 			// null-terminate the password
