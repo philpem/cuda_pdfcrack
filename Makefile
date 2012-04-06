@@ -109,7 +109,7 @@ PLATFORM	?=	linux
 BUILD_TYPE	?=	debug
 
 # target executable
-TARGET		=	test
+TARGET		=	cudapdf
 
 # source files that produce object files
 SRC			=	main.cu cuda_kernel.cu password_gen.cu
