@@ -156,7 +156,7 @@ NVCC	=	nvcc
 CFLAGS	=	-Wall -pedantic -std=gnu99 $(EXT_CFLAGS)
 CXXFLAGS=	-Wall -pedantic -std=gnu++0x $(EXT_CXXFLAGS)
 LDFLAGS	=	$(EXT_LDFLAGS)
-NVCCFLAGS=	--compiler-bindir=/opt/cuda/gcc43links -g
+NVCCFLAGS=	-g
 RM		=	rm
 STRIP	=	strip
 
