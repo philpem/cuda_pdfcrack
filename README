@@ -1,0 +1,26 @@
+Usage is a little convoluted... You'll need 'pdfcrack' (http://pdfcrack.sourceforge.net/ or apt-get install pdfcrack) first.
+
+Run pdfcrack on your PDF file, then stop it before it starts cracking the password:
+
+$ pdfcrack pdfs/Untitled1_UserPw-oZ4r.pdf 
+PDF version 1.4
+Security Handler: Standard
+V: 2
+R: 3
+P: -1028
+Length: 128
+Encrypted Metadata: True
+FileID: 1e9a3e73564cc53d6f6b3c328cb9d44b
+U: bed6172072e7401a65c3bb5cb5bd87dc00000000000000000000000000000000
+O: 4d5d94faf81719e50b1195c59543fd5cde9d2158ca622be4de609bd15682dad1
+
+<CTRL-C>
+
+Now you need to combine the values in the form:
+
+./cudapdf P Length FileID U O
+
+e.g. for the example above:
+./cudapdf -1028 128 1e9a3e73564cc53d6f6b3c328cb9d44b bed6172072e7401a65c3bb5cb5bd87dc00000000000000000000000000000000 4d5d94faf81719e50b1195c59543fd5cde9d2158ca622be4de609bd15682dad1
+
+The password for the hash set above is "oZ4r".
