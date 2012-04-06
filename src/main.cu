@@ -1,20 +1,26 @@
 #include <stdio.h>
 #include <ctype.h>
+#include "cutil.h"
 #include "cuda_kernel.h"
 #include "password_gen.h"
 
 // number of threads per block
 #define THREADSPERBLOCK	256
 // number of blocks per grid
-#define BLOCKSPERGRID	16
+#define BLOCKSPERGRID	256
 //#define BLOCKSPERGRID	512
 
 // total number of threads
 #define SIZE (THREADSPERBLOCK * BLOCKSPERGRID)
 
 // check parameters
-#if (THREADSPERBLOCK > 256)
+#if (THREADSPERBLOCK > 512)
 # error Number of threads per block exceeds maximum permitted by CUDA
+#endif
+
+#ifndef CUDA_SAFE_CALL
+#define CUDA_SAFE_CALL
+#warning Cuda_safe_call not defined!
 #endif
 
 ///////////////////////////////////////////////////////////////////
@@ -176,7 +182,7 @@ int main(int argc, char **argv)
 {
 	ComputeBlock cb[SIZE];
 	ComputeBlock *devPtrCb;
-	int memsize = SIZE * sizeof(ComputeBlock);
+	size_t memsize = SIZE * sizeof(ComputeBlock);
 	PDFINFO_s pdfinfo_loc;
 
 	// Parse the command line
@@ -185,7 +191,7 @@ int main(int argc, char **argv)
 	DumpPDFINFO(&pdfinfo_loc);
 
 	// allocate GPU memory for the calculations
-	cudaMalloc((void**)&devPtrCb, memsize);
+	CUDA_SAFE_CALL(cudaMalloc((void**)&devPtrCb, memsize));
 
 	// generate passwords
 	int done=false;
@@ -195,7 +201,7 @@ int main(int argc, char **argv)
 	char str[33];
 	password_init(32, counter, str);
 	do {
-		int i;
+		size_t i;
 
 		// create one block of passwords
 		for (i=0; i<SIZE; i++) {
@@ -229,7 +235,7 @@ int main(int argc, char **argv)
 		// process the passwords
 
 		// copy input data to the graphics chip
-		cudaMemcpy(devPtrCb, cb, memsize, cudaMemcpyHostToDevice);
+		CUDA_SAFE_CALL(cudaMemcpy(devPtrCb, cb, memsize, cudaMemcpyHostToDevice));
 
 		// Copy PDFINFO block from CPU --> GPU "constant RAM" space
 		LoadPdfInfo(&pdfinfo_loc);
@@ -238,15 +244,15 @@ int main(int argc, char **argv)
 		ComputeKernel <<< BLOCKSPERGRID, THREADSPERBLOCK >>> (devPtrCb);
 
 		// copy result from GPU to local CPU RAM
-		cudaMemcpy(cb, devPtrCb, memsize, cudaMemcpyDeviceToHost);
+		CUDA_SAFE_CALL(cudaMemcpy(cb, devPtrCb, memsize, cudaMemcpyDeviceToHost));
 
 		// scan through the output array
-		for (int i=0; i<SIZE; i++) {
+		for (i=0; i<SIZE; i++) {
 			// exit if we hit the start of the "empty" compute blocks
 			if (cb[i].pwlen == 0) break;
 
 			// don't display non-matching passwords
-			if (!cb[i].match) continue;
+			if ((!cb[i].match) && (i != 0)) continue;
 
 			// null-terminate the password
 			cb[i].password[cb[i].pwlen] = '\0';
@@ -263,6 +269,6 @@ int main(int argc, char **argv)
 	} while ((len <= MAXLEN) && (!done));
 
 	// free GPU memory
-	cudaFree(devPtrCb);
+	CUDA_SAFE_CALL(cudaFree(devPtrCb));
 }
 
